@@ -10,7 +10,8 @@ class App extends Component {
     
     this.state = {
       rgb: [],
-      weights: [ .99, .55, .01 ] // want these to all eventually become the same thing
+      weights: [ 1, .25 ], // want these to all eventually become the same thing
+      sign: '+'
     }
   }
 
@@ -27,7 +28,7 @@ class App extends Component {
         b: _.random(0, 255)
       }
     ))
-    this.setState({ rgb });
+    this.setState({ rgb, weights: [1, .25] });
   }
 
   // machine learning sorting with initially random weights
@@ -43,15 +44,72 @@ class App extends Component {
     return rgb;
   }
 
+  // create better weights (naive way for now)
   train(weights) {
-    const guessArray = this.learnToSort(this.state.weights);
-    const desiredArray = this.sortColors();
-    const errors = desiredArray.map( (correct, index) => {
-      return Math.abs(correct.b - guessArray[index].b);
+
+    let mathFunctions = {
+      '+': (a,b) => a + b,
+      '-': (a,b) => a - b
+    }
+
+    let unadjusted = 0;
+    let adjusted = 0;
+
+    const trials = 150;
+
+    for( let i = 0; i < trials; i++){
+      let guessArray = this.learnToSort(weights);
+      let desiredArray = this.sortColors();
+      const unadjustedError = this.calcError(guessArray, desiredArray);
+  
+      unadjusted += unadjustedError;
+  
+      let newWeights = _.cloneDeep(weights);
+      newWeights[0] = mathFunctions[this.state.sign](newWeights[0], .25)
+
+      guessArray = this.learnToSort(newWeights);
+      desiredArray = this.sortColors();
+      const adjustedError = this.calcError(guessArray, desiredArray);
+  
+      adjusted += adjustedError;
+    }
+
+    unadjusted /= trials;
+    adjusted /= trials;
+
+    const isCorrectAdjustment = adjusted < unadjusted;
+    const isFinal = Math.abs(adjusted - unadjusted) < 1;
+
+    console.log(isCorrectAdjustment);
+
+    if(!isCorrectAdjustment && !isFinal) {
+      if(this.state.sign === '+') {
+        this.setState({ sign: '-'}, () => console.log(this.state.sign))
+      } else {
+        this.setState({ sign: '+' }, () => console.log(this.state.sign))
+      }
+    }
+
+    // finalize the weight change
+    if( isCorrectAdjustment ) {
+
+      let newWeights = _.cloneDeep(weights);
+      newWeights[0] = mathFunctions[this.state.sign](newWeights[0], .25)
+
+      this.setState({ weights: newWeights }, () => {
+        console.log(this.state)
+      });
+    }
+    // weight will move either up or down by .25
+
+  }
+
+  calcError(guess, desired) {
+    const errors = desired.map( (correct, index) => {
+      return Math.abs(correct.b - guess[index].b);
     })
     const avgError = errors.reduce((acc, cur) => acc + cur) / errors.length;
-    console.log(errors);
-    console.log('ERROR SCORE', avgError);
+    return avgError;
   }
 
   // creates desired result
@@ -72,16 +130,16 @@ class App extends Component {
             <div key={i} className='box' style={{backgroundColor:`rgb(${255},${0},${rgb.b})`}} />
           ))}
         </div>
-        <button onClick={() => this.sortColors()}>
+        <button onClick={() => this.setState({ rgb: this.sortColors() })}>
           SORT COLORS
         </button>
-        <button onClick={() => this.learnToSort(this.state.weights)}>
+        <button onClick={() => this.setState({ rgb:this.learnToSort(this.state.weights) })}>
           LEARN SORT
         </button>
         <button onClick={() => this.createColors()}>
           NEW COLORS
         </button>
-        <button onClick={() => this.train()}>
+        <button onClick={() => this.train(this.state.weights)}>
           TRAIN
         </button>
       </div>
